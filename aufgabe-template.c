@@ -158,8 +158,21 @@ static void Waage (void *pvParameters) {
 			fill(3, 8, uc_y, 2, 1000, false);
 			fill(4, 6, uc_y, 2, 1000, false);
 			xSemaphoreGive(xWaagenSemaphore);	
+		}
+		vTaskDelay(100);
+		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE){
+			
+			// char[100] returnValue;
+			// GetPrivateProfileString("Waage %d", 2, "Komponent 1", 0, returnValue, 100, ini);
+
+			// color, x, y, n_of_rows, time_of_filling, bottom
+			fill(2, 10, uc_y, 2, 1000, true);
+			fill(3, 8, uc_y, 2, 1000, false);
+			fill(4, 6, uc_y, 2, 1000, false);
+			xSemaphoreGive(xWaagenSemaphore);	
 			vTaskDelete(NULL);
 		}
+		
 	}
 }
 
@@ -172,7 +185,6 @@ static void WasserVentil (void *pvParameters) {
 }
 
 static void Mischer (void *pvParameters) {
-
 for(;;){}
 }
 
