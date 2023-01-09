@@ -30,7 +30,8 @@ static void Mischer(void *pvParameters);
 
 
 static SemaphoreHandle_t xWaagenSemaphore = NULL;
-static TimerHandle_t xTimer = NULL;
+static SemaphoreHandle_t xWasserVentilSemaphore = NULL;
+static QueueHandle_t xMischerQueue = NULL;
 
 bool quit = false;
 int TaskData[N_TASKS];
@@ -48,11 +49,13 @@ static void drawEquipment(){
 	mvprintw(START_X+8, START_Y, "|       |         |       |         |       |");
 	mvprintw(START_X+9, START_Y, "|       |         |       |         |       |");
 	mvprintw(START_X+10, START_Y,"\\_______/         \\_______/         \\_______/");
-	mvprintw(START_X+11, START_Y, "   | |===============| |===============| |");
+	mvprintw(START_X+11, START_Y, " __| |_______________| |_______________| |__");
 	mvprintw(START_X+12, START_Y,"|                                           |");
 	mvprintw(START_X+13, START_Y,"|                                           |");
 	mvprintw(START_X+14, START_Y,"|                                           |");
-	mvprintw(START_X+15, START_Y,"\\___________________________________________/");
+	mvprintw(START_X+15, START_Y,"|                                           |");
+	mvprintw(START_X+16, START_Y,"|                                           |");
+	mvprintw(START_X+17, START_Y,"\\___________________________________________/");
 	refresh();
 	taskEXIT_CRITICAL();
 }
@@ -79,7 +82,11 @@ void main_rtos( void )
 
 	// semaphore creating
 	xWaagenSemaphore = xSemaphoreCreateMutex();
-	xSemaphoreGive(xWaagenSemaphore);
+	xWasserVentilSemaphore = xSemaphoreCreateMutex();
+	xMischerQueue = xQueueCreate(1, sizeof(int));
+
+	xSemaphoreTake(xWasserVentilSemaphore, 0);
+	xSemaphoreTake(xWaagenSemaphore, 0);
 
 
 	// task creating
@@ -109,7 +116,7 @@ void main_rtos( void )
 				"Mischer", 					
 				configMINIMAL_STACK_SIZE, 		
 				(void*) 1, 					  	    
-				mainKEYBOARD_TASK_PRIORITY,    
+				mainKEYBOARD_TASK_PRIORITY	,    
 				NULL );
 
 	xTaskCreate(vKeyHitTask, "Keyboard", configMINIMAL_STACK_SIZE, NULL, mainKEYBOARD_TASK_PRIORITY, NULL );
@@ -120,6 +127,11 @@ void main_rtos( void )
 }
 
 /*-----------------------------------------------------------*/
+
+void call_recept(){
+	// char[100] returnValue;
+	// GetPrivateProfileString("Waage %d", 2, "Komponent 1", 0, returnValue, 100, ini);
+}
 
 void fill(u_int8_t color, u_int8_t x, u_int8_t y, u_int8_t n_of_rows, u_int32_t time_of_filling, bool bottom){
 	taskENTER_CRITICAL();
@@ -143,49 +155,148 @@ void fill(u_int8_t color, u_int8_t x, u_int8_t y, u_int8_t n_of_rows, u_int32_t 
 	refresh();
 	taskEXIT_CRITICAL();
 }
+
+pour(int color, int x, int y){
+	taskENTER_CRITICAL();
+	attron(COLOR_PAIR(color));
+	mvprintw(START_X+x+1, START_Y+y-3, "__   __");
+	mvprintw(START_X+x+2, START_Y+y,      " ");
+	mvprintw(START_X+x+3, START_Y+y,      " ");
+	refresh();
+	taskEXIT_CRITICAL();
+}
 	
 
 static void Waage (void *pvParameters) {
 	u_int8_t uc_y = (u_int8_t) pvParameters;
+	int stage = 1;
+	int current_x = 10; 
+	int colors[3] = {2,3,4};
+	int current_color = 0;
+	int call_counter = 0;
+	bool bottom = true;
+	bool flush = false;
+
 	for(;;){
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE){
-			
-			// char[100] returnValue;
-			// GetPrivateProfileString("Waage %d", 2, "Komponent 1", 0, returnValue, 100, ini);
+		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 1){
 
 			// color, x, y, n_of_rows, time_of_filling, bottom
-			fill(2, 10, uc_y, 2, 1000, true);
-			fill(3, 8, uc_y, 2, 1000, false);
-			fill(4, 6, uc_y, 2, 1000, false);
+			fill(2, 10, uc_y, 3, 400, true);	
+			fill(3, 7, uc_y, 3, 400, false);
+			fill(4, 4, uc_y, 3, 400, false);
+			stage = 2;
 			xSemaphoreGive(xWaagenSemaphore);	
+			vTaskDelay(100);
 		}
-		vTaskDelay(100);
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE){
-			
+
+
+		if (xSemaphoreTake(xWaagenSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE & stage == 2){
+			flush = true;
+		}
+						
 			// char[100] returnValue;
 			// GetPrivateProfileString("Waage %d", 2, "Komponent 1", 0, returnValue, 100, ini);
 
-			// color, x, y, n_of_rows, time_of_filling, bottom
-			fill(2, 10, uc_y, 2, 1000, true);
-			fill(3, 8, uc_y, 2, 1000, false);
-			fill(4, 6, uc_y, 2, 1000, false);
-			xSemaphoreGive(xWaagenSemaphore);	
+		if (flush == true){
+			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdPASS & current_x>2){
+				
+				// color, x, y, n_of_rows, time_of_filling, bottom
+				fill(1, current_x, uc_y, 2, 400, bottom);
+				// color, x, y, length
+				pour(colors[current_color], 9, uc_y+3);
+				bottom = false;
+				
+				current_x = current_x - 1;
+				call_counter = call_counter + 1;
+
+				if(call_counter >= 3){
+					call_counter = 0;
+					if(current_color <= 3){
+						current_color = current_color + 1;
+					}
+				}
+
+			}
+		}
+				
+		if(current_x<=2){
+			flush = false;
+			pour(1, 9, uc_y+3);
+			xSemaphoreGive(xWaagenSemaphore);
 			vTaskDelete(NULL);
 		}
 		
 	}
 }
 
-static void WasserVentil (void *pvParameters) {
-	// color, x, y, n_of_rows, time_of_filling, bottom
-	fill(8, 10, WASSERKONTAINER_Y, 7, 0, true);
-		for(;;){
 
+static void WasserVentil (void *pvParameters) {
+	fill(8, 10, WASSERKONTAINER_Y, 7, 0, true);
+	bool flush = false;
+	bool bottom = true;
+	int color = 8;
+	int current_x = 10;
+
+	for(;;){
+		if(xSemaphoreTake(xWasserVentilSemaphore,0) == pdTRUE){
+			flush = true;		
+		}
+
+		if(flush == true){
+			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE & current_x>2){
+				pour(8, 9, WASSERKONTAINER_Y+3);
+				fill(1, current_x, WASSERKONTAINER_Y, 2, 400, bottom);
+				bottom = false;
+				current_x = current_x - 1;
+			}
+		}
+
+		if(current_x <= 2){
+			flush = false;
+			pour(1, 9, WASSERKONTAINER_Y+3);
+			xSemaphoreGive(xWasserVentilSemaphore);
+			vTaskDelete(NULL);			
+		}
 	}
 }
 
+
 static void Mischer (void *pvParameters) {
-for(;;){}
+	int current_x = 17;
+	int current_y = WAAGE1_Y;
+	bool bottom = true;
+	int color = 0;
+
+	// color, x, y, n_of_rows, time_of_filling, bottom
+		for(;;){
+			if(xQueueReceive(xMischerQueue,(int*) &color, pdMS_TO_TICKS(10)) == pdPASS & current_x > 12){
+				fill(color, current_x, current_y, 1, 0, bottom);
+				current_y = current_y + 7;
+
+				if(current_y >= 43){
+					current_y = WAAGE1_Y;
+					current_x = current_x - 1;
+					bottom = false;
+				}
+				
+				// vTaskDelay(100);
+			}
+/*
+			if (xSemaphoreTake(xWaagenSemaphore,0) == pdTRUE){
+				// mischen();
+				xSemaphoreGive(xWasserVentilSemaphore);
+				vTaskDelay(400);
+			}
+*/
+			
+
+			if(xSemaphoreTake(xWasserVentilSemaphore, 0)== pdTRUE){
+				// mischen();
+				vTaskDelay(400);
+				xSemaphoreGive(xWasserVentilSemaphore);
+			}
+
+	}
 }
 
 
@@ -210,8 +321,18 @@ static void vKeyHitTask(void *pvParameters) {
 				endwin();
 				exit(2);
 			}
+			case 101:{ //'e'
+				call_recept();
+			}
+			case 115: { //'s'
+				xSemaphoreGive(xWaagenSemaphore);
+			}
 			default:
-				break;
+				taskENTER_CRITICAL();
+				attron(COLOR_PAIR(1));
+				mvprintw(40, 2, "Command: ");
+				refresh();
+				taskEXIT_CRITICAL();
 		}
 	}
 }
