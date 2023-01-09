@@ -116,7 +116,7 @@ void main_rtos( void )
 				"Mischer", 					
 				configMINIMAL_STACK_SIZE, 		
 				(void*) 1, 					  	    
-				mainKEYBOARD_TASK_PRIORITY	,    
+				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
 
 	xTaskCreate(vKeyHitTask, "Keyboard", configMINIMAL_STACK_SIZE, NULL, mainKEYBOARD_TASK_PRIORITY, NULL );
@@ -185,12 +185,12 @@ static void Waage (void *pvParameters) {
 			fill(3, 7, uc_y, 3, 400, false);
 			fill(4, 4, uc_y, 3, 400, false);
 			stage = 2;
-			xSemaphoreGive(xWaagenSemaphore);	
+			xSemaphoreGive(xWaagenSemaphore);
 			vTaskDelay(100);
 		}
 
 
-		if (xSemaphoreTake(xWaagenSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE & stage == 2){
+		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 2){
 			flush = true;
 		}
 						
@@ -198,7 +198,7 @@ static void Waage (void *pvParameters) {
 			// GetPrivateProfileString("Waage %d", 2, "Komponent 1", 0, returnValue, 100, ini);
 
 		if (flush == true){
-			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdPASS & current_x>2){
+			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdTRUE){
 				
 				// color, x, y, n_of_rows, time_of_filling, bottom
 				fill(1, current_x, uc_y, 2, 400, bottom);
@@ -217,13 +217,13 @@ static void Waage (void *pvParameters) {
 				}
 
 			}
-		}
-				
-		if(current_x<=2){
-			flush = false;
-			pour(1, 9, uc_y+3);
-			xSemaphoreGive(xWaagenSemaphore);
-			vTaskDelete(NULL);
+
+			if(current_x<=2){
+				flush = false;
+				pour(1, 9, uc_y+3);
+				xSemaphoreGive(xWaagenSemaphore);
+				vTaskDelete(NULL);
+			}
 		}
 		
 	}
@@ -243,19 +243,19 @@ static void WasserVentil (void *pvParameters) {
 		}
 
 		if(flush == true){
-			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE & current_x>2){
+			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE){
 				pour(8, 9, WASSERKONTAINER_Y+3);
 				fill(1, current_x, WASSERKONTAINER_Y, 2, 400, bottom);
 				bottom = false;
 				current_x = current_x - 1;
 			}
-		}
 
-		if(current_x <= 2){
-			flush = false;
-			pour(1, 9, WASSERKONTAINER_Y+3);
-			xSemaphoreGive(xWasserVentilSemaphore);
-			vTaskDelete(NULL);			
+			if(current_x <= 2){
+				flush = false;
+				pour(1, 9, WASSERKONTAINER_Y+3);
+				xSemaphoreGive(xWasserVentilSemaphore);
+				vTaskDelete(NULL);			
+			}
 		}
 	}
 }
@@ -269,7 +269,7 @@ static void Mischer (void *pvParameters) {
 
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
-			if(xQueueReceive(xMischerQueue,(int*) &color, pdMS_TO_TICKS(10)) == pdPASS & current_x > 12){
+			if(xQueueReceive(xMischerQueue,(int*) &color, 0) == pdPASS & current_x > 12){
 				fill(color, current_x, current_y, 1, 0, bottom);
 				current_y = current_y + 7;
 
@@ -281,13 +281,13 @@ static void Mischer (void *pvParameters) {
 				
 				// vTaskDelay(100);
 			}
-/*
+
 			if (xSemaphoreTake(xWaagenSemaphore,0) == pdTRUE){
 				// mischen();
 				xSemaphoreGive(xWasserVentilSemaphore);
 				vTaskDelay(400);
 			}
-*/
+
 			
 
 			if(xSemaphoreTake(xWasserVentilSemaphore, 0)== pdTRUE){
