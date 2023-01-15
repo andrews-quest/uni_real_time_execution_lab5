@@ -30,11 +30,17 @@ static void Mischer(void *pvParameters);
 
 
 static SemaphoreHandle_t xWaagenSemaphore = NULL;
+static SemaphoreHandle_t xWaagenGefuelltSemaphore = NULL;
 static SemaphoreHandle_t xWasserVentilSemaphore = NULL;
+static SemaphoreHandle_t xMischerSemaphore = NULL;
+
 static QueueHandle_t xMischerQueue = NULL;
+
+static TimerHandle_t xMischenTimer = NULL;
 
 bool quit = false;
 int TaskData[N_TASKS];
+
 /*-----------------------------------------------------------*/
 
 static void drawEquipment(){
@@ -80,13 +86,20 @@ void main_rtos( void )
 	init_pair(8, COLOR_WHITE, COLOR_BLUE);
 	init_pair(9, COLOR_WHITE, COLOR_MAGENTA);
 
-	// semaphore creating
+	// synchronisational primitives creating
 	xWaagenSemaphore = xSemaphoreCreateMutex();
+	xWaagenGefuelltSemaphore = xSemaphoreCreateCounting(2, 0);
 	xWasserVentilSemaphore = xSemaphoreCreateMutex();
-	xMischerQueue = xQueueCreate(1, sizeof(int));
-
+	xMischerSemaphore = xSemaphoreCreateCounting(2, 0);
 	xSemaphoreTake(xWasserVentilSemaphore, 0);
 	xSemaphoreTake(xWaagenSemaphore, 0);
+
+
+	xMischerQueue = xQueueCreate(1, sizeof(int));
+
+	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(10000), false, (void *) 1, NULL);
+
+	
 
 
 	// task creating
@@ -156,7 +169,7 @@ void fill(u_int8_t color, u_int8_t x, u_int8_t y, u_int8_t n_of_rows, u_int32_t 
 	taskEXIT_CRITICAL();
 }
 
-pour(int color, int x, int y){
+void pour(int color, int x, int y){
 	taskENTER_CRITICAL();
 	attron(COLOR_PAIR(color));
 	mvprintw(START_X+x+1, START_Y+y-3, "__   __");
@@ -165,11 +178,24 @@ pour(int color, int x, int y){
 	refresh();
 	taskEXIT_CRITICAL();
 }
+
+void mix(int x, int y, bool rand_color){
+	taskENTER_CRITICAL();
+	int rand_x = rand() % 4;
+	int rand_y = rand() % 30;
+	int color = 9;
+	if(rand_color == true){
+		int color = rand() % 9;
+	}
+	attron(COLOR_PAIR(color));
+	mvprintw(START_X+12+rand_x, START_Y+rand_y, "       ");
+	refresh();
+	taskEXIT_CRITICAL();
+}
 	
 
 static void Waage (void *pvParameters) {
 	u_int8_t uc_y = (u_int8_t) pvParameters;
-	int stage = 1;
 	int current_x = 10; 
 	int colors[3] = {2,3,4};
 	int current_color = 0;
@@ -178,19 +204,18 @@ static void Waage (void *pvParameters) {
 	bool flush = false;
 
 	for(;;){
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 1){
+		if(xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & uxSemaphoreGetCount(xWaagenGefuelltSemaphore) < 2){
+				// color, x, y, n_of_rows, time_of_filling, bottom
+				fill(2, 10, uc_y, 3, 400, true);
+				fill(3, 7, uc_y, 3, 400, false);
+				fill(4, 4, uc_y, 3, 400, false);
+				xSemaphoreGive(xWaagenSemaphore);
+				xSemaphoreGive(xWaagenGefuelltSemaphore);
+				vTaskDelay(100);
+		}			
 
-			// color, x, y, n_of_rows, time_of_filling, bottom
-			fill(2, 10, uc_y, 3, 400, true);	
-			fill(3, 7, uc_y, 3, 400, false);
-			fill(4, 4, uc_y, 3, 400, false);
-			stage = 2;
-			xSemaphoreGive(xWaagenSemaphore);
-			vTaskDelay(100);
-		}
 
-
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 2){
+		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & uxSemaphoreGetCount(xWaagenGefuelltSemaphore) == 2){
 			flush = true;
 		}
 						
@@ -222,6 +247,7 @@ static void Waage (void *pvParameters) {
 				flush = false;
 				pour(1, 9, uc_y+3);
 				xSemaphoreGive(xWaagenSemaphore);
+				xSemaphoreGive(xMischerSemaphore);
 				vTaskDelete(NULL);
 			}
 		}
@@ -266,10 +292,11 @@ static void Mischer (void *pvParameters) {
 	int current_y = WAAGE1_Y;
 	bool bottom = true;
 	int color = 0;
+	bool mischen = false;
 
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
-			if(xQueueReceive(xMischerQueue,(int*) &color, 0) == pdPASS & current_x > 12){
+				if(xQueueReceive(xMischerQueue,(int*) &color, 0) == pdPASS & current_x > 12){
 				fill(color, current_x, current_y, 1, 0, bottom);
 				current_y = current_y + 7;
 
@@ -282,19 +309,47 @@ static void Mischer (void *pvParameters) {
 				// vTaskDelay(100);
 			}
 
-			if (xSemaphoreTake(xWaagenSemaphore,0) == pdTRUE){
-				// mischen();
-				xSemaphoreGive(xWasserVentilSemaphore);
-				vTaskDelay(400);
+			if(xMischerSemaphore != NULL){
+				if(uxSemaphoreGetCount(xMischerSemaphore) == 2){
+					xSemaphoreGive(xWasserVentilSemaphore);
+					vSemaphoreDelete(xMischerSemaphore);
+					mischen = true;
+				}
 			}
+			/*
+			if(xWasserVentilSemaphore != NULL){
+				if(mischen == true){
+					if(xSemaphoreTake(xWasserVentilSemaphore, 0) == pdTRUE){
+						xTimerStart(xMischenTimer, 0);
+						vSemaphoreDelete(xWasserVentilSemaphore);
+					}
+				}
+				
+			}
+			*/	
 
+			if(xTimerIsTimerActive(xMischenTimer) == pdTRUE){
+				if(xTimerGetExpiryTime(xMischenTimer) > 3000){
+					mix(current_x, current_y, true);
+				}else{
+					mix(current_x, current_y, false);
+				}		
+				vTaskDelay(20);
+			} 
 			
-
+			/*
+			if(xTimerGetExpiryTime(xMischenTimer) == 0){
+				xTimerStop(xMischenTimer,0);
+				xSemaphoreGive(xWasserVentilSemaphore);
+				vTaskDelay(200);
+			}
+			
 			if(xSemaphoreTake(xWasserVentilSemaphore, 0)== pdTRUE){
-				// mischen();
-				vTaskDelay(400);
+				mischen(current_x, current_y);
+				vTaskDelay(200);
 				xSemaphoreGive(xWasserVentilSemaphore);
 			}
+			*/
 
 	}
 }
