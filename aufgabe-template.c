@@ -95,7 +95,7 @@ void main_rtos( void )
 
 	xMischerQueue = xQueueCreate(1, sizeof(int));
 
-	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(7000), pdFasle, (int *) 1, NULL);
+	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(7000), pdFALSE, (int *) 1, NULL);
 
 	
 	// task creating
@@ -174,6 +174,27 @@ static void pour(int color, int x, int y){
 	refresh();
 	taskEXIT_CRITICAL();
 }
+
+static void mischen(int x, int y, bool rand_color){
+	taskENTER_CRITICAL();
+	int rand_x = rand() % 6;
+	int rand_y = rand() % 37;
+
+	int color = 9;
+	if(rand_color == true){
+		color = rand() % 8 + 1;
+	}
+	attron(COLOR_PAIR(color));
+
+	if(rand_x == 0){
+		mvprintw(START_X+17-rand_x, START_Y+1+rand_y, "_______");
+	}else{
+		mvprintw(START_X+17-rand_x, START_Y+1+rand_y, "       ");
+	}
+
+	refresh();
+	taskEXIT_CRITICAL();
+}
 	
 
 static void Waage (void *pvParameters) {
@@ -187,20 +208,19 @@ static void Waage (void *pvParameters) {
 	bool flush = false;
 
 	for(;;){
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 1){
-
-			// color, x, y, n_of_rows, time_of_filling, bottom
-			fill(2, 10, uc_y, 3, 400, true);	
-			fill(3, 7, uc_y, 3, 400, false);
-			fill(4, 4, uc_y, 3, 400, false);
-			stage = 2;
-			xSemaphoreGive(xWaagenSemaphore);
-			vTaskDelay(100);
-		}
-
-
-		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE & stage == 2){
-			flush = true;
+		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE){
+			if(stage == 1){
+				// color, x, y, n_of_rows, time_of_filling, bottom
+				fill(2, 10, uc_y, 3, 400, true);	
+				fill(3, 7, uc_y, 3, 400, false);
+				fill(4, 4, uc_y, 3, 400, false);
+				stage = 2;
+				xSemaphoreGive(xWaagenSemaphore);
+				vTaskDelay(100);
+			}			
+			else if (stage == 2){
+				flush = true;
+			}
 		}
 						
 			// char[100] returnValue;
@@ -278,6 +298,7 @@ static void Mischer (void *pvParameters) {
 	int color = 0;
 
 	bool open_ventil = false;
+	bool mix = false;
 
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
@@ -294,12 +315,19 @@ static void Mischer (void *pvParameters) {
 				// vTaskDelay(100);
 			}
 
-			if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2){
+			if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2 & mix == false){
 				xTimerStart(xMischenTimer, 0);
+				mix = true;
 			}
 
 			if(xTimerIsTimerActive(xMischenTimer) == pdTRUE){
-				if(xTimerGetExpiryTime(xMischenTimer) > pdMS_TO_TICKS(3000)){
+
+				taskENTER_CRITICAL();
+				mvprintw(40, 40, "Time left: %d", xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount());
+				refresh();
+				taskEXIT_CRITICAL();
+
+				if(xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount() > pdMS_TO_TICKS(3000)){
 					mischen(current_x, current_y, true);
 				}else{
 					mischen(current_x, current_y, false);
@@ -327,6 +355,7 @@ static void Mischer (void *pvParameters) {
 
 static void vKeyHitTask(void *pvParameters) {
 	int k = 0;
+	bool process_running = false;
 
     attron(A_BOLD);
     attron(COLOR_PAIR(1));
@@ -350,7 +379,10 @@ static void vKeyHitTask(void *pvParameters) {
 				call_recept();
 			}
 			case 115: { //'s'
-				xSemaphoreGive(xWaagenSemaphore);
+				if(process_running == false){
+					xSemaphoreGive(xWaagenSemaphore);
+				}
+				process_running = true;
 			}
 			default:
 				taskENTER_CRITICAL();
