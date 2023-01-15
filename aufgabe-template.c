@@ -177,12 +177,16 @@ static void pour(int color, int x, int y){
 
 static void mischen(int x, int y, bool rand_color){
 	taskENTER_CRITICAL();
-	int rand_x = rand() % 6;
+	int rand_x = rand() % x;
+	
 	int rand_y = rand() % 37;
-
+	if(rand_x == x - 1){
+		rand_y = rand() % (y - 7);
+	}
+		
 	int color = 9;
 	if(rand_color == true){
-		color = rand() % 8 + 1;
+		color = (rand() % 8) + 2;
 	}
 	attron(COLOR_PAIR(color));
 
@@ -328,9 +332,9 @@ static void Mischer (void *pvParameters) {
 				taskEXIT_CRITICAL();
 
 				if(xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount() > pdMS_TO_TICKS(3000)){
-					mischen(current_x, current_y, true);
+					mischen(current_x-12, current_y, true);
 				}else{
-					mischen(current_x, current_y, false);
+					mischen(current_x-12, current_y, false);
 				}
 				vTaskDelay(20);
 			}
