@@ -10,6 +10,7 @@
 
 #include <ncurses.h>
 #include <stdlib.h>
+#include <stdio.h>
 // #include <libconfig.h>
 
 #define INCLUDE_vTaskDelete 1
@@ -21,7 +22,8 @@
 #define WAAGE2_Y 19
 #define WASSERKONTAINER_Y 37
 
-
+#define MAX_X 19 // how deep in comparison to START_X the bottom lies
+// #define CURRENT_X_COMPENSATION 12 // used for converting x to feed it into mischen()
 
 static void vKeyHitTask( void *pvParameters);
 static void Waage(void *pvParameters);
@@ -32,6 +34,7 @@ static void Mischer(void *pvParameters);
 static SemaphoreHandle_t xWaagenSemaphore = NULL;
 static SemaphoreHandle_t xWaagenLeerSemaphore = NULL;
 static SemaphoreHandle_t xWasserVentilSemaphore = NULL;
+static SemaphoreHandle_t xZweitesMischenSemaphore = NULL;
 
 static QueueHandle_t xMischerQueue = NULL;
 
@@ -59,7 +62,9 @@ static void drawEquipment(){
 	mvprintw(START_X+14, START_Y,"|                                           |");
 	mvprintw(START_X+15, START_Y,"|                                           |");
 	mvprintw(START_X+16, START_Y,"|                                           |");
-	mvprintw(START_X+17, START_Y,"\\___________________________________________/");
+	mvprintw(START_X+17, START_Y,"|                                           |");
+	mvprintw(START_X+18, START_Y,"|                                           |");
+	mvprintw(START_X+19, START_Y,"\\___________________________________________/");
 	refresh();
 	taskEXIT_CRITICAL();
 }
@@ -67,6 +72,7 @@ static void drawEquipment(){
 void main_rtos( void )
 {
 	drawEquipment();
+	srand(time(0));
 
 	//initialise recipy
 	// LPCSTR Rezept = "./mischer.ini"
@@ -90,13 +96,21 @@ void main_rtos( void )
 
 	xWaagenLeerSemaphore = xSemaphoreCreateCounting(2, 0);
 
-	xWasserVentilSemaphore = xSemaphoreCreateMutex();
+	xWasserVentilSemaphore = xSemaphoreCreateBinary();
 	xSemaphoreTake(xWasserVentilSemaphore, 0);
 
 	xMischerQueue = xQueueCreate(1, sizeof(int));
 
-	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(7000), pdFALSE, (int *) 1, NULL);
+	TimerCallbackFunction_t MischenCallback(){
+		xSemaphoreGive(xWasserVentilSemaphore);
+	}
 
+	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(5000), pdFALSE, (int *) 1, MischenCallback);
+
+	xZweitesMischenSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreTake(xZweitesMischenSemaphore, 0);
+
+	 
 	
 	// task creating
 	xTaskCreate( Waage,			   
@@ -177,23 +191,33 @@ static void pour(int color, int x, int y){
 
 static void mischen(int x, int y, bool rand_color){
 	taskENTER_CRITICAL();
-	int rand_x = rand() % x;
-	
+
+	// exclusion of unfilled line at the end
+	if(y == 1){
+		x = x + 1;
+		y = 44;
+	}
+
+	int rand_x = rand() % (MAX_X + 1 - x);
+
+	// y based on if the line is fully filled
 	int rand_y = rand() % 37;
-	if(rand_x == x - 1){
+	if(rand_x == MAX_X - x ){
 		rand_y = rand() % (y - 7);
 	}
-		
+
+	// determining color	
 	int color = 9;
 	if(rand_color == true){
 		color = (rand() % 8) + 2;
 	}
 	attron(COLOR_PAIR(color));
 
+	// printing
 	if(rand_x == 0){
-		mvprintw(START_X+17-rand_x, START_Y+1+rand_y, "_______");
+		mvprintw(START_X+MAX_X-rand_x, START_Y+1+rand_y, "_______");
 	}else{
-		mvprintw(START_X+17-rand_x, START_Y+1+rand_y, "       ");
+		mvprintw(START_X+MAX_X-rand_x, START_Y+1+rand_y, "       ");
 	}
 
 	refresh();
@@ -215,9 +239,9 @@ static void Waage (void *pvParameters) {
 		if (xSemaphoreTake(xWaagenSemaphore, 0) == pdTRUE){
 			if(stage == 1){
 				// color, x, y, n_of_rows, time_of_filling, bottom
-				fill(2, 10, uc_y, 3, 400, true);	
-				fill(3, 7, uc_y, 3, 400, false);
-				fill(4, 4, uc_y, 3, 400, false);
+				fill(2, 10, uc_y, 3, 100, true);	
+				fill(3, 7, uc_y, 3, 100, false);
+				fill(4, 4, uc_y, 3, 100, false);
 				stage = 2;
 				xSemaphoreGive(xWaagenSemaphore);
 				vTaskDelay(100);
@@ -234,7 +258,7 @@ static void Waage (void *pvParameters) {
 			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdTRUE){
 				
 				// color, x, y, n_of_rows, time_of_filling, bottom
-				fill(1, current_x, uc_y, 2, 400, bottom);
+				fill(1, current_x, uc_y, 2, 100, bottom);
 				// color, x, y, length
 				pour(colors[current_color], 9, uc_y+3);
 				bottom = false;
@@ -279,7 +303,7 @@ static void WasserVentil (void *pvParameters) {
 		if(flush == true){
 			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE){
 				pour(8, 9, WASSERKONTAINER_Y+3);
-				fill(1, current_x, WASSERKONTAINER_Y, 2, 400, bottom);
+				fill(1, current_x, WASSERKONTAINER_Y, 2, 100, bottom);
 				bottom = false;
 				current_x = current_x - 1;
 			}
@@ -287,7 +311,7 @@ static void WasserVentil (void *pvParameters) {
 			if(current_x <= 2){
 				flush = false;
 				pour(1, 9, WASSERKONTAINER_Y+3);
-				xSemaphoreGive(xWasserVentilSemaphore);
+				xSemaphoreGive(xZweitesMischenSemaphore);
 				vTaskDelete(NULL);			
 			}
 		}
@@ -296,13 +320,16 @@ static void WasserVentil (void *pvParameters) {
 
 
 static void Mischer (void *pvParameters) {
-	int current_x = 17;
+	int current_x = 19;
 	int current_y = WAAGE1_Y;
 	bool bottom = true;
 	int color = 0;
 
 	bool open_ventil = false;
-	bool mix = false;
+	bool first_mix = false;
+	bool second_mix = false;
+	unsigned long time_left = 0;
+
 
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
@@ -317,40 +344,40 @@ static void Mischer (void *pvParameters) {
 				}
 				
 				// vTaskDelay(100);
-			}
-
-			if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2 & mix == false){
-				xTimerStart(xMischenTimer, 0);
-				mix = true;
-			}
-
-			if(xTimerIsTimerActive(xMischenTimer) == pdTRUE){
-
 				taskENTER_CRITICAL();
-				mvprintw(40, 40, "Time left: %d", xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount());
+				mvprintw(35, 35, "Current x: %d  , Current y: %d  ", current_x, current_y);
 				refresh();
 				taskEXIT_CRITICAL();
+			}
 
-				if(xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount() > pdMS_TO_TICKS(3000)){
-					mischen(current_x-12, current_y, true);
-				}else{
-					mischen(current_x-12, current_y, false);
+			if(first_mix == false){
+				if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2){
+					xTimerStart(xMischenTimer, 0);
+					first_mix = true;
 				}
-				vTaskDelay(20);
-			}
-
-			
-
-			if(open_ventil == true){
-				xSemaphoreGive(xWasserVentilSemaphore);
-				vTaskDelay(100);
 			}
 			
 
-			if(xSemaphoreTake(xWasserVentilSemaphore, 0)== pdTRUE){
-				// mischen();
-				vTaskDelay(100);
-				xSemaphoreGive(xWasserVentilSemaphore);
+			if(xMischenTimer != NULL){
+				if(xTimerIsTimerActive(xMischenTimer) != pdFALSE){
+							
+				time_left = xTimerGetExpiryTime(xMischenTimer) - xTaskGetTickCount();
+
+					if(time_left > pdMS_TO_TICKS(3000)){
+						mischen(current_x, current_y, true);
+						vTaskDelay(40);
+					}else if(time_left < pdMS_TO_TICKS(3000) & time_left > 0){
+						mischen(current_x, current_y, false);
+						vTaskDelay(20);
+					}else if(time_left <= 100){
+						xSemaphoreGive(xWasserVentilSemaphore);
+					}
+				}
+			}
+			
+			if(xSemaphoreTake(xZweitesMischenSemaphore, 0) == pdTRUE & second_mix == false){
+				xTimerReset(xMischenTimer, 0);
+				second_mix = true;
 			}
 
 	}
