@@ -61,7 +61,11 @@ static void drawEquipment(){
 	mvprintw(START_X+12, START_Y,"|                                           |");
 	mvprintw(START_X+13, START_Y,"|                                           |");
 	mvprintw(START_X+14, START_Y,"|                                           |");
-	mvprintw(START_X+15, START_Y,"\\___________________________________________/");
+	mvprintw(START_X+15, START_Y,"|                                           |");
+	mvprintw(START_X+16, START_Y,"|                                           |");
+	mvprintw(START_X+17, START_Y,"|                                           |");
+	mvprintw(START_X+18, START_Y,"|                                           |");
+	mvprintw(START_X+19, START_Y,"\\___________________________________________/");
 	refresh();
 	taskEXIT_CRITICAL();
 }
@@ -106,7 +110,7 @@ void main_rtos( void )
 				(void*) WAAGE2_Y, 					  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
-	
+	/*
 	xTaskCreate( WasserVentil,			   
 				"Wasser Ventil", 					
 				configMINIMAL_STACK_SIZE, 		
@@ -120,7 +124,7 @@ void main_rtos( void )
 				(void*) 1, 					  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
-
+	*/
 	xTaskCreate(vKeyHitTask, "Keyboard", configMINIMAL_STACK_SIZE, NULL, mainKEYBOARD_TASK_PRIORITY, NULL );
 
 	vTaskStartScheduler();
@@ -130,7 +134,7 @@ void main_rtos( void )
 
 /*-----------------------------------------------------------*/
 
-void fill(int * scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
+void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 	taskENTER_CRITICAL();
 	attron(COLOR_PAIR(color));
 
@@ -141,9 +145,9 @@ void fill(int * scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t
 	scales_model[current_x][current_y] = this_drop;
 
 	if(current_x == 9){
-		mvprintw(current_x+1, current_y, "_");
+		mvprintw(START_X+current_x+1, START_Y+1+current_y, "_");
 	}else{
-		mvprintw(current_x+1, current_y, " ");
+		mvprintw(START_X+current_x+1, START_Y+1+current_y, " ");
 	}
 
 	vTaskDelay(20);
@@ -154,28 +158,34 @@ void fill(int * scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t
 
 static void Waage (void *pvParameters) {
 	u_int8_t uc_y = (u_int8_t) pvParameters;
-	int stage = 1;
+	
 	int current_x = 9;
 	int current_y = 0; 
+
+	// ought to refactor
 	int colors[3] = {2,3,4};
 	int current_color = 0;
 	int call_counter = 0;
-	bool bottom = true;
-
+	
+	int stage = 1;
 	bool fill_scales = false;
 	bool flush = false;
 
-	drop scales_model[9][7] = { {NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL},
-								{NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+	drop def_drop;
+	def_drop.color = 1;
+
+	drop scales_model[9][7] = { {def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
 							  };
-								
+	
+	int free_cells = 62;
 	
 	int components[3] = {9,9,9};
 	int current_component_number = 0;
@@ -195,23 +205,25 @@ static void Waage (void *pvParameters) {
 
 		// filling the scales
 		if (fill_scales == true){			
-			if(current_component_number <= 2){
-				fill(&scales_model, colors[current_component_number], current_x, current_y);
+			if(current_component_number <= 2 & free_cells >= 0){
+				fill(scales_model , colors[current_component_number], current_x, current_y);
 
 				// coordinate management
 				current_y = current_y + 1;
-				if(current_y == 7){
-					current_y == 0;
-					current_x == current_x - 1;
+				if(current_y >= 7){
+					current_y = 0;
+					current_x = current_x - 1;
 				}
 
 				// color management
 				if(current_component_value <= components[current_component_number]){
 					current_component_value = current_component_number + 1;
 				}else{
-					current_component_value = 1;
-					current_component_value = current_component_value + 1;
+					current_component_value = 0;
+					current_component_number = current_component_number + 1;
 				}
+				
+				free_cells = free_cells - 1;
 			}else{ // end of filling
 				xSemaphoreGive(xWaagenSemaphore);
 				stage = 2;		
