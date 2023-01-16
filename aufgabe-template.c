@@ -1,3 +1,8 @@
+/*taskENTER_CRITICAL();
+mvprintw(35, 35, "number: %d    value:%d", current_component_number, current_component_value);
+refresh();
+taskEXIT_CRITICAL();
+*/
 
 /* Standard includes. */
 #include <time.h>
@@ -92,7 +97,7 @@ void main_rtos( void )
 
 	// semaphore creating
 	xWaagenSemaphore = xSemaphoreCreateMutex();
-	xSemaphoreGive(xWaagenSemaphore);
+	xSemaphoreTake(xWaagenSemaphore, 0);
 
 
 	// task creating
@@ -133,9 +138,11 @@ void main_rtos( void )
 }
 
 /*-----------------------------------------------------------*/
+static void call_recept(){
 
-void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
-	taskENTER_CRITICAL();
+}
+
+static void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 	attron(COLOR_PAIR(color));
 
 	drop this_drop;
@@ -144,20 +151,21 @@ void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t 
 	this_drop.color = color;
 	scales_model[current_x][current_y] = this_drop;
 
+	taskENTER_CRITICAL();
 	if(current_x == 9){
-		mvprintw(START_X+current_x+1, START_Y+1+current_y, "_");
+		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
 	}else{
-		mvprintw(START_X+current_x+1, START_Y+1+current_y, " ");
+		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
 	}
-
-	vTaskDelay(20);
 	refresh();
 	taskEXIT_CRITICAL();
+
+	vTaskDelay(20);
 }
 	
 
 static void Waage (void *pvParameters) {
-	u_int8_t uc_y = (u_int8_t) pvParameters;
+	u_int8_t start_y = (u_int8_t) pvParameters;
 	
 	int current_x = 9;
 	int current_y = 0; 
@@ -187,7 +195,7 @@ static void Waage (void *pvParameters) {
 	
 	int free_cells = 62;
 	
-	int components[3] = {9,9,9};
+	int components[3] = {9, 9, 9};
 	int current_component_number = 0;
 	int current_component_value = 0;
 
@@ -206,7 +214,8 @@ static void Waage (void *pvParameters) {
 		// filling the scales
 		if (fill_scales == true){			
 			if(current_component_number <= 2 & free_cells >= 0){
-				fill(scales_model , colors[current_component_number], current_x, current_y);
+				// changing scales_model and visual representation
+				fill(scales_model , colors[current_component_number], current_x, start_y + current_y);
 
 				// coordinate management
 				current_y = current_y + 1;
@@ -216,16 +225,18 @@ static void Waage (void *pvParameters) {
 				}
 
 				// color management
-				if(current_component_value <= components[current_component_number]){
-					current_component_value = current_component_number + 1;
-				}else{
+				current_component_value = current_component_value + 1;
+				if(current_component_value >= components[current_component_number]){
 					current_component_value = 0;
 					current_component_number = current_component_number + 1;
 				}
 				
+				// total capacity control
 				free_cells = free_cells - 1;
+
 			}else{ // end of filling
 				xSemaphoreGive(xWaagenSemaphore);
+				fill_scales = false;
 				stage = 2;		
 				vTaskDelay(100);
 			}
@@ -380,7 +391,7 @@ static void vKeyHitTask(void *pvParameters) {
 				taskEXIT_CRITICAL();
 		}
 	}
-}
+} 
 
 /*-----------------------------------------------------------*/
 
