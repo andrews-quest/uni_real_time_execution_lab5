@@ -121,20 +121,23 @@ void main_rtos( void )
 	xZweitesMischenSemaphore = xSemaphoreCreateBinary();
 	xSemaphoreTake(xZweitesMischenSemaphore, 0);
 
+	int waage_1_daten[4] = {WAAGE1_Y, 2, 3, 4};
+	int waage_2_daten[4] = {WAAGE2_Y, 5, 6, 7};
+
 
 	// task creating
 	xTaskCreate( Waage,			   
 				"Waage 1", 					
 				configMINIMAL_STACK_SIZE, 		
-				(void*) WAAGE1_Y, 					  	    
+				(void *) &waage_1_daten,				  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
-	mvprintw(5, 0, "Task %d", 0);
+	// mvprintw(5, 0, "Task %d", 0);
 
 	xTaskCreate( Waage,			   
 				"Waage 2", 					
 				configMINIMAL_STACK_SIZE, 		
-				(void*) WAAGE2_Y, 					  	    
+				(void *) &waage_2_daten,		  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
 	
@@ -164,17 +167,20 @@ static void call_recept(){
 
 }
 
-static void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
+static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int max_x){
 	attron(COLOR_PAIR(color));
 
+	// updating scales_model
+	/*
 	drop this_drop;
 	this_drop.x = current_x;
 	this_drop.y = current_y;
 	this_drop.color = color;
 	scales_model[current_x][current_y] = this_drop;
+	*/
 
 	taskENTER_CRITICAL();
-	if(current_x == 9){
+	if(current_x == max_x){
 		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
 	}else{
 		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
@@ -185,29 +191,51 @@ static void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_
 	vTaskDelay(20);
 }
 
-static void flush(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
+static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
+	attron(COLOR_PAIR(1));
+	/*
+	drop this_drop = scales_model[current_x][current_y];
+	color = this_drop.color;
+	*/
+	taskENTER_CRITICAL();
+	if(current_x == 9){
+		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
+	}else{
+		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
+	}
+	refresh();
+	taskEXIT_CRITICAL();
 
+	vTaskDelay(20);
+	// return color;
 }
 	
 
-static void Waage (void *pvParameters) {
-	u_int8_t start_y = (u_int8_t) pvParameters;
-	
+static void Waage (void * pvParameters) {
+	int start_y = *(int *) pvParameters;
+
 	int current_x = 9;
 	int current_y = 0; 
 
-	// ought to refactor
-	int colors[3] = {2,3,4};
-	int current_color = 0;
-	int call_counter = 0;
+	int colors[3] = {2, 2, 2};
+	colors[0] = * ((int *)pvParameters + 1);
+	colors[1] = * ((int *)pvParameters + 2);
+	colors[2] = * ((int *)pvParameters + 3);	
+
+	taskENTER_CRITICAL();
+	mvprintw(35, 35, "colors 1: %d    2:%d      3:%d", colors[0],colors[1],colors[2]);
+	refresh();
+	taskEXIT_CRITICAL();
 	
 	int stage = 1;
 	bool fill_scales = false;
-	bool flush = false;
-
+	bool flush_scales = false;
+	
+	/*
 	drop def_drop;
 	def_drop.color = 1;
 
+	
 	drop scales_model[9][7] = { {def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
 								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
 								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
@@ -216,9 +244,10 @@ static void Waage (void *pvParameters) {
 								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
 								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
 								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
-								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop},
+								{def_drop, def_drop, def_drop, def_drop, def_drop, def_drop, def_drop}
 							  };
-	
+	*/
+
 	int free_cells = 62;
 	
 	int components[3] = {9, 9, 9};
@@ -233,7 +262,7 @@ static void Waage (void *pvParameters) {
 				fill_scales = true;
 			}			
 			else if (stage == 2){
-				flush = true;
+				flush_scales = true;
 			}
 		}
 
@@ -241,7 +270,7 @@ static void Waage (void *pvParameters) {
 		if (fill_scales == true){			
 			if(current_component_number <= 2 & free_cells >= 0){
 				// changing scales_model and visual representation
-				fill(scales_model , colors[current_component_number], current_x, start_y + current_y);
+				fill(colors[current_component_number], current_x, start_y + current_y, 9);
 
 				// coordinate management
 				current_y = current_y + 1;
@@ -275,9 +304,9 @@ static void Waage (void *pvParameters) {
 
 		// flushing the scales
 		
-		if (flush == true){
-			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdTRUE){
-				flush(scales_model , colors[current_component_number], current_x, start_y + current_y);				
+		if (flush_scales == true){
+			if(xQueueSend(xMischerQueue,(int*)& colors[current_component_value], 0) == pdTRUE){
+				flush(colors[current_component_number], current_x, start_y + current_y);				
 				
 				// coordinate management
 				current_y = current_y + 1;
@@ -297,8 +326,8 @@ static void Waage (void *pvParameters) {
 				free_cells = free_cells + 1;				
 			}
 
-			if(){
-				flush = false;
+			if(free_cells == 63){ // end flushing
+				flush_scales = false;
 				xSemaphoreGive(xWaagenSemaphore);
 				xSemaphoreGive(xWaagenLeerSemaphore);
 				vTaskDelete(NULL);
@@ -310,15 +339,14 @@ static void Waage (void *pvParameters) {
 
 
 static void WasserVentil (void *pvParameters) {
-	// color, x, y, n_of_rows, time_of_filling, bottom
-	fill(8, 10, WASSERKONTAINER_Y, 7, 0, true);
+	
 		for(;;){
 
 	}
 }
 
 static void Mischer (void *pvParameters) {
-	int current_x = 19;
+	int current_x = 18;
 	int current_y = WAAGE1_Y;
 	bool bottom = true;
 	int color = 0;
@@ -328,20 +356,23 @@ static void Mischer (void *pvParameters) {
 	bool second_mix = false;
 	unsigned long time_left = 0;
 
+	int free_cells = 43 * 8;
 
+	
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
 			if(xQueueReceive(xMischerQueue,(int*) &color, 0) == pdPASS & current_x > 12){
-				fill(color, current_x, current_y, 1, 0, bottom);
-				current_y = current_y + 7;
+				fill(color, current_x, current_y, 18);
+				current_y = current_y + 1;
 
 				if(current_y >= 43){
 					current_y = WAAGE1_Y;
 					current_x = current_x - 1;
-					bottom = false;
 				}
+
+				free_cells = free_cells - 1;
 				
-				vTaskDelay(20);
+				// 	vTaskDelay(20);
 			}
 
 			/*
