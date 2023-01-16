@@ -167,8 +167,12 @@ static void call_recept(){
 
 }
 
-static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int max_x){
+static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int start_x, int start_y, int bottom_x){
 	attron(COLOR_PAIR(color));
+
+	for(int i = 1; i < current_x-START_X; i++){
+		mvprintw(start_x+i, start_y+3, " ");
+	}
 
 	// updating scales_model
 	/*
@@ -180,7 +184,7 @@ static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int max
 	*/
 
 	taskENTER_CRITICAL();
-	if(current_x == max_x){
+	if(current_x == start_x + 1){
 		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
 	}else{
 		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
@@ -188,7 +192,7 @@ static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int max
 	refresh();
 	taskEXIT_CRITICAL();
 
-	vTaskDelay(20);
+	vTaskDelay(30);
 }
 
 static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
@@ -209,6 +213,13 @@ static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 	vTaskDelay(20);
 	// return color;
 }
+
+static void stop_pouring(u_int8_t current_x, u_int8_t current_y, int start_x, int start_y){
+	attron(COLOR_PAIR(1));
+	for(int i = 1; i < current_x+1; i++){
+		mvprintw(start_x+i-1, start_y+3, " ");
+	}
+}
 	
 
 static void Waage (void * pvParameters) {
@@ -221,11 +232,6 @@ static void Waage (void * pvParameters) {
 	colors[0] = * ((int *)pvParameters + 1);
 	colors[1] = * ((int *)pvParameters + 2);
 	colors[2] = * ((int *)pvParameters + 3);	
-
-	taskENTER_CRITICAL();
-	mvprintw(35, 35, "colors 1: %d    2:%d      3:%d", colors[0],colors[1],colors[2]);
-	refresh();
-	taskEXIT_CRITICAL();
 	
 	int stage = 1;
 	bool fill_scales = false;
@@ -270,7 +276,7 @@ static void Waage (void * pvParameters) {
 		if (fill_scales == true){			
 			if(current_component_number <= 2 & free_cells >= 0){
 				// changing scales_model and visual representation
-				fill(colors[current_component_number], current_x, start_y + current_y, 9);
+				fill(colors[current_component_number], current_x, start_y + current_y, START_X+1, START_Y+start_y, START_X+10);
 
 				// coordinate management
 				current_y = current_y + 1;
@@ -290,6 +296,8 @@ static void Waage (void * pvParameters) {
 				free_cells = free_cells - 1;
 
 			}else{ // end of filling
+
+				stop_pouring(current_x, start_y + current_y, START_X+1, START_Y+start_y);
 				xSemaphoreGive(xWaagenSemaphore);
 				fill_scales = false;
 				stage = 2;		
@@ -340,13 +348,13 @@ static void Waage (void * pvParameters) {
 
 static void WasserVentil (void *pvParameters) {
 	
-		for(;;){
+	for(;;){
 
 	}
 }
 
 static void Mischer (void *pvParameters) {
-	int current_x = 18;
+	int current_x = 8;
 	int current_y = WAAGE1_Y;
 	bool bottom = true;
 	int color = 0;
@@ -362,7 +370,7 @@ static void Mischer (void *pvParameters) {
 	// color, x, y, n_of_rows, time_of_filling, bottom
 		for(;;){
 			if(xQueueReceive(xMischerQueue,(int*) &color, 0) == pdPASS & current_x > 12){
-				fill(color, current_x, current_y, 18);
+				fill(color, START_X+current_x, current_y, START_X+10, START_Y+1, START_X+18);
 				current_y = current_y + 1;
 
 				if(current_y >= 43){
@@ -375,15 +383,16 @@ static void Mischer (void *pvParameters) {
 				// 	vTaskDelay(20);
 			}
 
-			/*
+			
 			if(first_mix == false){
 				if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2){
+					stop_pouring(current_x, current_y, START_X+10, START_Y+1);
 					xTimerStart(xMischenTimer, 0);
 					first_mix = true;
 				}
 			}
 			
-
+			/*
 			if(xMischenTimer != NULL){
 				if(xTimerIsTimerActive(xMischenTimer) != pdFALSE){
 							
