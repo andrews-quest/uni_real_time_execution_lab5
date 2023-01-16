@@ -95,9 +95,25 @@ void main_rtos( void )
 	init_pair(8, COLOR_WHITE, COLOR_BLUE);
 	init_pair(9, COLOR_WHITE, COLOR_MAGENTA);
 
-	// semaphore creating
+	// sync primitives creating
 	xWaagenSemaphore = xSemaphoreCreateMutex();
 	xSemaphoreTake(xWaagenSemaphore, 0);
+
+	xWaagenLeerSemaphore = xSemaphoreCreateCounting(2, 0);
+
+	xWasserVentilSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreTake(xWasserVentilSemaphore, 0);
+
+	xMischerQueue = xQueueCreate(1, sizeof(int));
+
+	TimerCallbackFunction_t MischenCallback(){
+		xSemaphoreGive(xWasserVentilSemaphore);
+	}
+
+	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(5000), pdFALSE, (int *) 1, MischenCallback);
+
+	xZweitesMischenSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreTake(xZweitesMischenSemaphore, 0);
 
 
 	// task creating
