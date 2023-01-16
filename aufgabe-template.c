@@ -77,17 +77,25 @@ static void drawEquipment(){
 	mvprintw(START_X+17, START_Y,"|                                           |");
 	mvprintw(START_X+18, START_Y,"|                                           |");
 	mvprintw(START_X+19, START_Y,"\\___________________________________________/");
+
+	// drawing water
+	attron(COLOR_PAIR(8));
+	mvprintw(START_X+2, START_Y+37,  "       ");
+	mvprintw(START_X+3, START_Y+37,  "       ");
+	mvprintw(START_X+4, START_Y+37,  "       ");
+	mvprintw(START_X+5, START_Y+37,  "       ");
+	mvprintw(START_X+6, START_Y+37,  "       ");
+	mvprintw(START_X+7, START_Y+37,  "       ");
+	mvprintw(START_X+8, START_Y+37,  "       ");
+	mvprintw(START_X+9, START_Y+37,  "       ");
+	mvprintw(START_X+10, START_Y+37, "_______");
+	attron(COLOR_PAIR(1));
 	refresh();
 	taskEXIT_CRITICAL();
 }
 
 void main_rtos( void )
 {
-	drawEquipment();
-
-	//initialise recipy
-	// LPCSTR Rezept = "./mischer.ini"
-
 	// settings of color usind ncurses.h library
 	initscr();
 	start_color();
@@ -100,6 +108,12 @@ void main_rtos( void )
 	init_pair(7, COLOR_WHITE, COLOR_RED);
 	init_pair(8, COLOR_WHITE, COLOR_BLUE);
 	init_pair(9, COLOR_WHITE, COLOR_MAGENTA);
+	drawEquipment();
+
+	//initialise recipy
+	// LPCSTR Rezept = "./mischer.ini"
+
+	
 
 	// sync primitives creating
 	xWaagenSemaphore = xSemaphoreCreateMutex();
@@ -222,7 +236,7 @@ static void mischen(int x, int y, bool rand_color){
 	int rand_x = rand() % (MAX_X + 1 - x);
 
 	// y based on if the line is fully filled
-	int rand_y = rand() % 43;
+	int rand_y = rand() % 42;
 	if(rand_x == MAX_X - x ){
 		rand_y = rand() % (y - 7);
 	}
@@ -369,9 +383,34 @@ static void Waage (void * pvParameters) {
 
 
 static void WasserVentil (void *pvParameters) {
-	
-	for(;;){
+	bool flush_water_container = false;
+	int color = 8;
+	int current_x = 10;
+	int current_y = 0;
 
+	for(;;){
+		if(xSemaphoreTake(xWasserVentilSemaphore,0) == pdTRUE){
+			flush_water_container = true;		
+		}
+
+		if(flush_water_container == true){
+			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE){
+
+				flush(1, current_x, current_y);
+
+				current_y = current_y + 1;
+				if(current_y >= 7){
+					current_y = 0;
+					current_x = current_x - 1;
+				}
+			}
+
+			if(current_x <= 2){
+				flush_water_container = false;
+				xSemaphoreGive(xZweitesMischenSemaphore);
+				vTaskDelete(NULL);			
+			}
+		}
 	}
 }
 
