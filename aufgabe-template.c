@@ -343,6 +343,7 @@ static void Mischer (void *pvParameters) {
 
 static void vKeyHitTask(void *pvParameters) {
 	int k = 0;
+	bool process_running = false;
 
     attron(A_BOLD);
     attron(COLOR_PAIR(1));
@@ -362,8 +363,21 @@ static void vKeyHitTask(void *pvParameters) {
 				endwin();
 				exit(2);
 			}
+			case 101:{ //'e'
+				call_recept();
+			}
+			case 115: { //'s'
+				if(process_running == false){
+					xSemaphoreGive(xWaagenSemaphore);
+				}
+				process_running = true;
+			}
 			default:
-				break;
+				taskENTER_CRITICAL();
+				attron(COLOR_PAIR(1));
+				mvprintw(40, 2, "Command: ");
+				refresh();
+				taskEXIT_CRITICAL();
 		}
 	}
 }
