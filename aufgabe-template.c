@@ -44,7 +44,13 @@ static void Mischer(void *pvParameters);
 
 
 static SemaphoreHandle_t xWaagenSemaphore = NULL;
-static TimerHandle_t xTimer = NULL;
+static SemaphoreHandle_t xWaagenLeerSemaphore = NULL;
+static SemaphoreHandle_t xWasserVentilSemaphore = NULL;
+static SemaphoreHandle_t xZweitesMischenSemaphore = NULL;
+
+static QueueHandle_t xMischerQueue = NULL;
+
+static TimerHandle_t xMischenTimer = NULL;
 
 bool quit = false;
 int TaskData[N_TASKS];
