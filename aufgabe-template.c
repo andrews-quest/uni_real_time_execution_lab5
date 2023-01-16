@@ -115,7 +115,7 @@ void main_rtos( void )
 				(void*) WAAGE2_Y, 					  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
-	/*
+	
 	xTaskCreate( WasserVentil,			   
 				"Wasser Ventil", 					
 				configMINIMAL_STACK_SIZE, 		
@@ -129,7 +129,7 @@ void main_rtos( void )
 				(void*) 1, 					  	    
 				mainKEYBOARD_TASK_PRIORITY,    
 				NULL );
-	*/
+	
 	xTaskCreate(vKeyHitTask, "Keyboard", configMINIMAL_STACK_SIZE, NULL, mainKEYBOARD_TASK_PRIORITY, NULL );
 
 	vTaskStartScheduler();
@@ -161,6 +161,10 @@ static void fill(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_
 	taskEXIT_CRITICAL();
 
 	vTaskDelay(20);
+}
+
+static void flush(drop scales_model[9][7], u_int8_t color, u_int8_t current_x, u_int8_t current_y){
+
 }
 	
 
@@ -238,47 +242,51 @@ static void Waage (void *pvParameters) {
 				xSemaphoreGive(xWaagenSemaphore);
 				fill_scales = false;
 				stage = 2;		
+				current_x = 9;
+				current_y = 0; 
+				current_component_number = 2;
+				current_component_value = 0;
 				vTaskDelay(100);
 			}
 				
 		}
 
 		// flushing the scales
-		/*
+		
 		if (flush == true){
 			if(xQueueSend(xMischerQueue,(int*)& colors[current_color], 0) == pdTRUE){
+				flush(scales_model , colors[current_component_number], current_x, start_y + current_y);				
 				
-				// color, x, y, n_of_rows, time_of_filling, bottom
-				fill(1, current_x, uc_y, 2, 100, bottom);
-				// color, x, y, length
-				pour(colors[current_color], 9, uc_y+3);
-				bottom = false;
-				
-				current_x = current_x - 1;
-				call_counter = call_counter + 1;
-
-				if(call_counter >= 3){
-					call_counter = 0;
-					if(current_color <= 3){
-						current_color = current_color + 1;
-					}
+				// coordinate management
+				current_y = current_y + 1;
+				if(current_y >= 7){
+					current_y = 0;
+					current_x = current_x - 1;
 				}
 
+				// color management
+				current_component_value = current_component_value + 1;
+				if(current_component_value >= components[current_component_number]){
+					current_component_value = 0;
+					current_component_number = current_component_number - 1;
+				}
+
+				// total capacity control
+				free_cells = free_cells + 1;				
 			}
 
-			if(current_x<=2){
+			if(){
 				flush = false;
-				pour(1, 9, uc_y+3);
 				xSemaphoreGive(xWaagenSemaphore);
 				xSemaphoreGive(xWaagenLeerSemaphore);
 				vTaskDelete(NULL);
 			}
-		}*/
+		}
 		
 	}
 }
 
-/*
+
 static void WasserVentil (void *pvParameters) {
 	// color, x, y, n_of_rows, time_of_filling, bottom
 	fill(8, 10, WASSERKONTAINER_Y, 7, 0, true);
@@ -311,13 +319,10 @@ static void Mischer (void *pvParameters) {
 					bottom = false;
 				}
 				
-				// vTaskDelay(100);
-				taskENTER_CRITICAL();
-				mvprintw(35, 35, "Current x: %d  , Current y: %d  ", current_x, current_y);
-				refresh();
-				taskEXIT_CRITICAL();
+				vTaskDelay(20);
 			}
 
+			/*
 			if(first_mix == false){
 				if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2){
 					xTimerStart(xMischenTimer, 0);
@@ -347,10 +352,10 @@ static void Mischer (void *pvParameters) {
 				xTimerReset(xMischenTimer, 0);
 				second_mix = true;
 			}
-
+			*/
 	}
 }
-*/
+
 
 static void vKeyHitTask(void *pvParameters) {
 	int k = 0;
