@@ -209,6 +209,41 @@ static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 	vTaskDelay(20);
 	// return color;
 }
+
+static void mischen(int x, int y, bool rand_color){
+	taskENTER_CRITICAL();
+
+	// exclusion of unfilled line at the end
+	if(y == 1){
+		x = x + 1;
+		y = 44;
+	}
+
+	int rand_x = rand() % (MAX_X + 1 - x);
+
+	// y based on if the line is fully filled
+	int rand_y = rand() % 43;
+	if(rand_x == MAX_X - x ){
+		rand_y = rand() % (y - 7);
+	}
+
+	// determining color	
+	int color = 9;
+	if(rand_color == true){
+		color = (rand() % 8) + 2;
+	}
+	attron(COLOR_PAIR(color));
+
+	// printing
+	if(rand_x == 0){
+		mvprintw(START_X+MAX_X-rand_x, START_Y+1+rand_y, "__");
+	}else{
+		mvprintw(START_X+MAX_X-rand_x, START_Y+1+rand_y, "  ");
+	}
+
+	refresh();
+	taskEXIT_CRITICAL();
+}
 	
 
 static void Waage (void * pvParameters) {
@@ -221,11 +256,6 @@ static void Waage (void * pvParameters) {
 	colors[0] = * ((int *)pvParameters + 1);
 	colors[1] = * ((int *)pvParameters + 2);
 	colors[2] = * ((int *)pvParameters + 3);	
-
-	taskENTER_CRITICAL();
-	mvprintw(35, 35, "colors 1: %d    2:%d      3:%d", colors[0],colors[1],colors[2]);
-	refresh();
-	taskEXIT_CRITICAL();
 	
 	int stage = 1;
 	bool fill_scales = false;
@@ -340,7 +370,7 @@ static void Waage (void * pvParameters) {
 
 static void WasserVentil (void *pvParameters) {
 	
-		for(;;){
+	for(;;){
 
 	}
 }
@@ -375,7 +405,7 @@ static void Mischer (void *pvParameters) {
 				// 	vTaskDelay(20);
 			}
 
-			/*
+			
 			if(first_mix == false){
 				if (uxSemaphoreGetCount(xWaagenLeerSemaphore) == 2){
 					xTimerStart(xMischenTimer, 0);
@@ -391,10 +421,10 @@ static void Mischer (void *pvParameters) {
 
 					if(time_left > pdMS_TO_TICKS(3000)){
 						mischen(current_x, current_y, true);
-						vTaskDelay(40);
+						vTaskDelay(15);
 					}else if(time_left < pdMS_TO_TICKS(3000) & time_left > 0){
 						mischen(current_x, current_y, false);
-						vTaskDelay(20);
+						vTaskDelay(7);
 					}else if(time_left <= 100){
 						xSemaphoreGive(xWasserVentilSemaphore);
 					}
@@ -405,7 +435,6 @@ static void Mischer (void *pvParameters) {
 				xTimerReset(xMischenTimer, 0);
 				second_mix = true;
 			}
-			*/
 	}
 }
 
