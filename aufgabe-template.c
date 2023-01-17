@@ -126,8 +126,9 @@ void main_rtos( void )
 
 	xMischerQueue = xQueueCreate(1, sizeof(int));
 
-	TimerCallbackFunction_t MischenCallback(){
+	TimerCallbackFunction_t MischenCallback(TimerHandle_t timer){
 		xSemaphoreGive(xWasserVentilSemaphore);
+		xTimerStop( timer, 0 );
 	}
 
 	xMischenTimer = xTimerCreate("Mischen Timer", pdMS_TO_TICKS(5000), pdFALSE, (int *) 1, MischenCallback);
@@ -385,7 +386,7 @@ static void Waage (void * pvParameters) {
 static void WasserVentil (void *pvParameters) {
 	bool flush_water_container = false;
 	int color = 8;
-	int current_x = 10;
+	int current_x = 9;
 	int current_y = 0;
 
 	for(;;){
@@ -396,7 +397,7 @@ static void WasserVentil (void *pvParameters) {
 		if(flush_water_container == true){
 			if(xQueueSend(xMischerQueue, (int*)& color, 0) == pdTRUE){
 
-				flush(1, current_x, current_y);
+				flush(1, current_x, 37+current_y);
 
 				current_y = current_y + 1;
 				if(current_y >= 7){
@@ -405,7 +406,7 @@ static void WasserVentil (void *pvParameters) {
 				}
 			}
 
-			if(current_x <= 2){
+			if(current_x <= 0){
 				flush_water_container = false;
 				xSemaphoreGive(xZweitesMischenSemaphore);
 				vTaskDelete(NULL);			
