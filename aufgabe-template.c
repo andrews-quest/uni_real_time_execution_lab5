@@ -196,7 +196,7 @@ static void fill(u_int8_t color, u_int8_t current_x, u_int8_t current_y, int max
 
 	taskENTER_CRITICAL();
 	if(current_x == max_x){
-		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
+		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
 	}else{
 		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
 	}
@@ -214,7 +214,7 @@ static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 	*/
 	taskENTER_CRITICAL();
 	if(current_x == 9){
-		mvprintw(START_X+current_x+1, START_Y+current_y, "_");
+		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
 	}else{
 		mvprintw(START_X+current_x+1, START_Y+current_y, " ");
 	}
@@ -228,18 +228,12 @@ static void flush(u_int8_t color, u_int8_t current_x, u_int8_t current_y){
 static void mischen(int x, int y, bool rand_color){
 	taskENTER_CRITICAL();
 
-	// exclusion of unfilled line at the end
-	if(y == 1){
-		x = x + 1;
-		y = 44;
-	}
-
-	int rand_x = rand() % (MAX_X + 1 - x);
+	int rand_x = rand() % (MAX_X - x);
 
 	// y based on if the line is fully filled
 	int rand_y = rand() % 42;
-	if(rand_x == MAX_X - x ){
-		rand_y = rand() % (y - 7);
+	if(rand_x == MAX_X - 1 - x ){
+		rand_y = rand() % (y-2);
 	}
 
 	// determining color	
@@ -340,7 +334,7 @@ static void Waage (void * pvParameters) {
 				stage = 2;		
 				current_x = 9;
 				current_y = 0; 
-				current_component_number = 2;
+				current_component_number = 0;
 				current_component_value = 0;
 				vTaskDelay(100);
 			}
@@ -350,8 +344,8 @@ static void Waage (void * pvParameters) {
 		// flushing the scales
 		
 		if (flush_scales == true){
-			if(xQueueSend(xMischerQueue,(int*)& colors[current_component_value], 0) == pdTRUE){
-				flush(colors[current_component_number], current_x, start_y + current_y);				
+			if(xQueueSend(xMischerQueue,(int*)& colors[current_component_number], 0) == pdTRUE){
+				flush(colors[current_component_number], current_x, start_y + current_y);		
 				
 				// coordinate management
 				current_y = current_y + 1;
@@ -364,14 +358,16 @@ static void Waage (void * pvParameters) {
 				current_component_value = current_component_value + 1;
 				if(current_component_value >= components[current_component_number]){
 					current_component_value = 0;
-					current_component_number = current_component_number - 1;
+					current_component_number = current_component_number + 1;
 				}
+
+				
 
 				// total capacity control
 				free_cells = free_cells + 1;				
 			}
 
-			if(free_cells == 63){ // end flushing
+			if(free_cells == 62){ // end flushing
 				flush_scales = false;
 				xSemaphoreGive(xWaagenSemaphore);
 				xSemaphoreGive(xWaagenLeerSemaphore);
@@ -435,7 +431,7 @@ static void Mischer (void *pvParameters) {
 				fill(color, current_x, current_y, 18);
 				current_y = current_y + 1;
 
-				if(current_y >= 43){
+				if(current_y >= 44){
 					current_y = WAAGE1_Y;
 					current_x = current_x - 1;
 				}
